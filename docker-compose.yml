@@ -10,9 +10,8 @@ services:
       - /var/docker/traccar/logs:/opt/traccar/logs:rw
       - /var/docker/traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
 
-
   nginx:
-    build: ./.docker/nginx
+    build: ./.docker/nginx/Dockerfile
     ports:
       - 80:80
       - 443:443
@@ -21,4 +20,3 @@ services:
     volumes:
       - /etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem:/etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem
       - /etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem:/etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem
-
