@@ -19,8 +19,6 @@ services:
     depends_on:
       - traccar
     volumes:
-      - static_volume:/code/staticfiles
-      - media_volume:/code/mediafiles
       - /etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem:/etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem
       - /etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem:/etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem
 
