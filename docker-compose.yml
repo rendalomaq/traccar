@@ -1,0 +1,26 @@
+version: "3.1"
+services:
+  traccar:
+    build: .
+    ports:
+      - "8082:8082"
+      - "5000:5150/tcp"
+      - "5000:5150/udp"
+    volumes:
+      - /var/docker/traccar/logs:/opt/traccar/logs:rw
+      - /var/docker/traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+
+
+nginx:
+  build: ./.docker/nginx
+  ports:
+    - 80:80
+    - 443:443
+  depends_on:
+    - django
+  volumes:
+    - static_volume:/code/staticfiles
+    - media_volume:/code/mediafiles
+    - /etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem:/etc/letsencrypt/live/gps.rendalomaq.com/fullchain.pem
+    - /etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem:/etc/letsencrypt/live/gps.rendalomaq.com/privkey.pem
+
