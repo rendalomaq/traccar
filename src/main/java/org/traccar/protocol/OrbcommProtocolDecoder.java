@@ -33,6 +33,7 @@ import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.TimeZone;
 
@@ -70,7 +71,7 @@ public class OrbcommProtocolDecoder extends BaseProtocolDecoder {
         for (int i = 0; i < messages.size(); i++) {
             JsonObject message = messages.getJsonObject(i);
             DeviceSession deviceSession = getDeviceSession(
-                    channel, remoteAddress, true, message.getJsonNumber("ID").toString());
+                    channel, remoteAddress, true, message.getString("MobileID"));
             if (deviceSession != null) {
 
                 Position position = new Position(getProtocolName());
@@ -84,7 +85,10 @@ public class OrbcommProtocolDecoder extends BaseProtocolDecoder {
                 for (int j = 0; j < fields.size(); j++) {
                     JsonObject field = fields.getJsonObject(j);
                     String value = field.getString("Value");
-                    switch (field.getString("Name")) {
+                    switch (field.getString("Name").toLowerCase()) {
+                        case "eventtime":
+                            position.setDeviceTime(new Date(Long.parseLong(value) * 1000));
+                            break;
                         case "latitude":
                             position.setLatitude(Integer.parseInt(value) / 60000.0);
                             break;
@@ -95,9 +99,9 @@ public class OrbcommProtocolDecoder extends BaseProtocolDecoder {
                             position.setSpeed(UnitsConverter.knotsFromKph(Integer.parseInt(value)));
                             break;
                         case "heading":
-                            position.setCourse(Integer.parseInt(value) * 0.1);
+                            int heading = Integer.parseInt(value);
+                            position.setCourse(heading <= 360 ? heading : 0);
                             break;
-
                         default:
                             break;
                     }

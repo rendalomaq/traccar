@@ -343,13 +343,6 @@ public final class Keys {
             Collections.singletonList(KeyType.GLOBAL));
 
     /**
-     * Automatically generate SQL database queries when possible.
-     */
-    public static final ConfigKey<Boolean> DATABASE_GENERATE_QUERIES = new ConfigKey<>(
-            "database.generateQueries",
-            Collections.singletonList(KeyType.GLOBAL));
-
-    /**
      * Database connection pool size. Default value is defined by the HikariCP library.
      */
     public static final ConfigKey<Integer> DATABASE_MAX_POOL_SIZE = new ConfigKey<>(
@@ -557,6 +550,14 @@ public final class Keys {
      */
     public static final ConfigKey<Integer> WEB_PORT = new ConfigKey<>(
             "web.port",
+            Collections.singletonList(KeyType.GLOBAL));
+
+    /**
+     * Sanitize all strings returned via API. This is needed to fix XSS issues in the old web interface. New React-based
+     * interface doesn't require this.
+     */
+    public static final ConfigKey<Boolean> WEB_SANITIZE = new ConfigKey<>(
+            "web.sanitize",
             Collections.singletonList(KeyType.GLOBAL));
 
     /**
@@ -1315,5 +1316,19 @@ public final class Keys {
             "logger.attributes",
             Collections.singletonList(KeyType.GLOBAL),
             "time,position,speed,course,accuracy,result");
+
+    /**
+     * Multicast address for broadcasting synchronization events.
+     */
+    public static final ConfigKey<String> BROADCAST_ADDRESS = new ConfigKey<>(
+            "broadcast.address",
+            Collections.singletonList(KeyType.GLOBAL));
+
+    /**
+     * Multicast port for broadcasting synchronization events.
+     */
+    public static final ConfigKey<Integer> BROADCAST_PORT = new ConfigKey<>(
+            "broadcast.port",
+            Collections.singletonList(KeyType.GLOBAL));
 
 }
