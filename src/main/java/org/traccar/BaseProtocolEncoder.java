@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 - 2019 Anton Tananaev (anton@traccar.org)
+ * Copyright 2015 - 2022 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,12 @@ import io.netty.channel.ChannelPromise;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.traccar.helper.NetworkUtil;
+import org.traccar.helper.model.AttributeUtil;
 import org.traccar.model.Command;
+import org.traccar.model.Device;
+import org.traccar.session.cache.CacheManager;
+
+import javax.inject.Inject;
 
 public abstract class BaseProtocolEncoder extends ChannelOutboundHandlerAdapter {
 
@@ -32,8 +37,19 @@ public abstract class BaseProtocolEncoder extends ChannelOutboundHandlerAdapter 
 
     private final Protocol protocol;
 
+    private CacheManager cacheManager;
+
     public BaseProtocolEncoder(Protocol protocol) {
         this.protocol = protocol;
+    }
+
+    public CacheManager getCacheManager() {
+        return cacheManager;
+    }
+
+    @Inject
+    public void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
     }
 
     public String getProtocolName() {
@@ -41,13 +57,13 @@ public abstract class BaseProtocolEncoder extends ChannelOutboundHandlerAdapter 
     }
 
     protected String getUniqueId(long deviceId) {
-        return Context.getIdentityManager().getById(deviceId).getUniqueId();
+        return cacheManager.getObject(Device.class, deviceId).getUniqueId();
     }
 
     protected void initDevicePassword(Command command, String defaultPassword) {
         if (!command.getAttributes().containsKey(Command.KEY_DEVICE_PASSWORD)) {
-            String password = Context.getIdentityManager()
-                .getDevicePassword(command.getDeviceId(), getProtocolName(), defaultPassword);
+            String password = AttributeUtil.getDevicePassword(
+                    cacheManager, command.getDeviceId(), getProtocolName(), defaultPassword);
             command.set(Command.KEY_DEVICE_PASSWORD, password);
         }
     }

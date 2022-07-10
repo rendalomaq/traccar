@@ -20,8 +20,7 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
+import org.traccar.session.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.BcdUtil;
@@ -32,7 +31,6 @@ import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
 import org.traccar.model.CellTower;
-import org.traccar.model.Device;
 import org.traccar.model.Network;
 import org.traccar.model.Position;
 import org.traccar.model.WifiAccessPoint;
@@ -114,6 +112,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
     private enum Variant {
         VXT01,
         WANWAY_S20,
+        SR411_MINI,
         GT06E_CARD,
         BENWAY,
         S5,
@@ -445,8 +444,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                 return null;
             }
             position.setDeviceId(deviceSession.getDeviceId());
-            if (deviceSession.getTimeZone() == null) {
-                deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
+            if (!deviceSession.contains(DeviceSession.KEY_TIMEZONE)) {
+                deviceSession.set(DeviceSession.KEY_TIMEZONE, getTimeZone(deviceSession.getDeviceId()));
             }
         }
 
@@ -456,8 +455,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             buf.readUnsignedShort(); // type
 
             deviceSession = getDeviceSession(channel, remoteAddress, imei);
-            if (deviceSession != null && deviceSession.getTimeZone() == null) {
-                deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
+            if (deviceSession != null && !deviceSession.contains(DeviceSession.KEY_TIMEZONE)) {
+                deviceSession.set(DeviceSession.KEY_TIMEZONE, getTimeZone(deviceSession.getDeviceId()));
             }
 
             if (dataLength > 10) {
@@ -469,10 +468,10 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                     offset = -offset;
                 }
                 if (deviceSession != null) {
-                    TimeZone timeZone = deviceSession.getTimeZone();
+                    TimeZone timeZone = deviceSession.get(DeviceSession.KEY_TIMEZONE);
                     if (timeZone.getRawOffset() == 0) {
                         timeZone.setRawOffset(offset * 1000);
-                        deviceSession.setTimeZone(timeZone);
+                        deviceSession.set(DeviceSession.KEY_TIMEZONE, timeZone);
                     }
                 }
             }
@@ -532,7 +531,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             buf.readUnsignedInt(); // data and alarm
 
-            decodeGps(position, buf, false, deviceSession.getTimeZone());
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
 
             buf.readUnsignedShort(); // terminal info
 
@@ -648,13 +647,25 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             return position;
 
+        } else if (type == MSG_LBS_MULTIPLE_3 && variant == Variant.SR411_MINI) {
+
+            decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
+
+            decodeLbs(position, buf, type, false);
+
+            position.set(Position.KEY_IGNITION, buf.readUnsignedByte() > 0);
+            position.set(Position.KEY_POWER, buf.readUnsignedShort() * 0.01);
+            position.set(Position.KEY_BATTERY, buf.readUnsignedShort() * 0.01);
+
+            return position;
+
         } else if (type == MSG_LBS_MULTIPLE_1 || type == MSG_LBS_MULTIPLE_2 || type == MSG_LBS_MULTIPLE_3
                 || type == MSG_LBS_EXTEND || type == MSG_LBS_WIFI || type == MSG_LBS_2
                 || type == MSG_WIFI_3 || type == MSG_WIFI_5) {
 
             boolean longFormat = type == MSG_LBS_2 || type == MSG_WIFI_3 || type == MSG_WIFI_5;
 
-            DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
+            DateBuilder dateBuilder = new DateBuilder((TimeZone) deviceSession.get(DeviceSession.KEY_TIMEZONE))
                     .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
                     .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
 
@@ -770,7 +781,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             }
 
             if (hasGps(type)) {
-                decodeGps(position, buf, false, deviceSession.getTimeZone());
+                decodeGps(position, buf, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
             } else {
                 getLastLocation(position, null);
             }
@@ -859,9 +870,9 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             boolean extendedAlarm = dataLength > 7;
             if (extendedAlarm) {
-                decodeGps(position, buf, false, false, false, deviceSession.getTimeZone());
+                decodeGps(position, buf, false, false, false, deviceSession.get(DeviceSession.KEY_TIMEZONE));
             } else {
-                DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
+                DateBuilder dateBuilder = new DateBuilder((TimeZone) deviceSession.get(DeviceSession.KEY_TIMEZONE))
                         .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
                         .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
                 getLastLocation(position, dateBuilder.getDate());
@@ -926,8 +937,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             return null;
         }
 
-        if (deviceSession.getTimeZone() == null) {
-            deviceSession.setTimeZone(getTimeZone(deviceSession.getDeviceId()));
+        if (!deviceSession.contains(DeviceSession.KEY_TIMEZONE)) {
+            deviceSession.set(DeviceSession.KEY_TIMEZONE, getTimeZone(deviceSession.getDeviceId()));
         }
 
         Position position = new Position(getProtocolName());
@@ -1006,11 +1017,16 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
             } else if (subType == 0x1b) {
 
-                buf.readUnsignedByte(); // header
-                buf.readUnsignedByte(); // type
-                position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(4)));
-                buf.readUnsignedByte(); // checksum
-                buf.readUnsignedByte(); // footer
+                if (Character.isLetter(buf.getUnsignedByte(buf.readerIndex()))) {
+                    String data = buf.readCharSequence(buf.readableBytes() - 6, StandardCharsets.US_ASCII).toString();
+                    position.set("serial", data.trim());
+                } else {
+                    buf.readUnsignedByte(); // header
+                    buf.readUnsignedByte(); // type
+                    position.set(Position.KEY_DRIVER_UNIQUE_ID, ByteBufUtil.hexDump(buf.readSlice(4)));
+                    buf.readUnsignedByte(); // checksum
+                    buf.readUnsignedByte(); // footer
+                }
                 return position;
 
             }
@@ -1027,15 +1043,13 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             if (photo.writableBytes() > 0) {
                 sendPhotoRequest(channel, pictureId);
             } else {
-                Device device = Context.getDeviceManager().getById(deviceSession.getDeviceId());
-                position.set(
-                        Position.KEY_IMAGE, Context.getMediaManager().writeFile(device.getUniqueId(), photo, "jpg"));
+                position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), photo, "jpg"));
                 photos.remove(pictureId).release();
             }
 
         } else if (type == MSG_AZ735_GPS || type == MSG_AZ735_ALARM) {
 
-            if (!decodeGps(position, buf, true, deviceSession.getTimeZone())) {
+            if (!decodeGps(position, buf, true, deviceSession.get(DeviceSession.KEY_TIMEZONE))) {
                 getLastLocation(position, position.getDeviceTime());
             }
 
@@ -1080,7 +1094,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
 
         } else if (type == MSG_OBD) {
 
-            DateBuilder dateBuilder = new DateBuilder(deviceSession.getTimeZone())
+            DateBuilder dateBuilder = new DateBuilder((TimeZone) deviceSession.get(DeviceSession.KEY_TIMEZONE))
                     .setDate(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte())
                     .setTime(buf.readUnsignedByte(), buf.readUnsignedByte(), buf.readUnsignedByte());
 
@@ -1264,9 +1278,7 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
                         position = new Position(getProtocolName());
                         position.setDeviceId(deviceSession.getDeviceId());
                         getLastLocation(position, new Date(timestamp));
-                        Device device = Context.getDeviceManager().getById(deviceSession.getDeviceId());
-                        position.set(Position.KEY_IMAGE,
-                                Context.getMediaManager().writeFile(device.getUniqueId(), photo, "jpg"));
+                        position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), photo, "jpg"));
                         photos.remove(mediaId).release();
                     }
                 }
@@ -1324,6 +1336,8 @@ public class Gt06ProtocolDecoder extends BaseProtocolDecoder {
             variant = Variant.VXT01;
         } else if (header == 0x7878 && type == MSG_LBS_MULTIPLE_3 && length == 0x31) {
             variant = Variant.WANWAY_S20;
+        } else if (header == 0x7878 && type == MSG_LBS_MULTIPLE_3 && length == 0x2e) {
+            variant = Variant.SR411_MINI;
         } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length >= 0x71) {
             variant = Variant.GT06E_CARD;
         } else if (header == 0x7878 && type == MSG_GPS_LBS_1 && length == 0x21) {

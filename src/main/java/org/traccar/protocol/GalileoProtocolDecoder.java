@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 - 2020 Anton Tananaev (anton@traccar.org)
+ * Copyright 2013 - 2022 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,7 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
+import org.traccar.session.DeviceSession;
 import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
 import org.traccar.helper.UnitsConverter;
@@ -215,7 +214,6 @@ public class GalileoProtocolDecoder extends BaseProtocolDecoder {
                 break;
             case 0xea:
                 position.set("userDataArray", ByteBufUtil.hexDump(buf.readSlice(buf.readUnsignedByte())));
-                position.set("userDataArray", ByteBufUtil.hexDump(buf.readSlice(buf.readUnsignedByte())));
                 break;
             default:
                 buf.skipBytes(getTagLength(tag));
@@ -239,8 +237,7 @@ public class GalileoProtocolDecoder extends BaseProtocolDecoder {
         return null;
     }
 
-    private Object decodePositions(
-            Channel channel, SocketAddress remoteAddress, ByteBuf buf) throws Exception {
+    private Object decodePositions(Channel channel, SocketAddress remoteAddress, ByteBuf buf) {
 
         int length = (buf.readUnsignedShortLE() & 0x7fff) + 3;
 
@@ -322,14 +319,13 @@ public class GalileoProtocolDecoder extends BaseProtocolDecoder {
         } else {
 
             DeviceSession deviceSession = getDeviceSession(channel, remoteAddress);
-            String uniqueId = Context.getIdentityManager().getById(deviceSession.getDeviceId()).getUniqueId();
 
             position = new Position(getProtocolName());
             position.setDeviceId(deviceSession.getDeviceId());
 
             getLastLocation(position, null);
 
-            position.set(Position.KEY_IMAGE, Context.getMediaManager().writeFile(uniqueId, photo, "jpg"));
+            position.set(Position.KEY_IMAGE, writeMediaFile(deviceSession.getUniqueId(), photo, "jpg"));
             photo.release();
             photo = null;
 

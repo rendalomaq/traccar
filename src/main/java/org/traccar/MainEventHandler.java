@@ -23,13 +23,24 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.traccar.broadcast.BroadcastService;
+import org.traccar.config.Config;
 import org.traccar.config.Keys;
 import org.traccar.database.StatisticsManager;
 import org.traccar.helper.DateUtil;
 import org.traccar.helper.NetworkUtil;
+import org.traccar.helper.model.PositionUtil;
+import org.traccar.model.Device;
 import org.traccar.model.Position;
+import org.traccar.session.ConnectionManager;
+import org.traccar.session.cache.CacheManager;
+import org.traccar.storage.Storage;
 import org.traccar.storage.StorageException;
+import org.traccar.storage.query.Columns;
+import org.traccar.storage.query.Condition;
+import org.traccar.storage.query.Request;
 
+import javax.inject.Inject;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -42,13 +53,26 @@ public class MainEventHandler extends ChannelInboundHandlerAdapter {
     private final Set<String> connectionlessProtocols = new HashSet<>();
     private final Set<String> logAttributes = new LinkedHashSet<>();
 
-    public MainEventHandler() {
-        String connectionlessProtocolList = Context.getConfig().getString(Keys.STATUS_IGNORE_OFFLINE);
+    private final CacheManager cacheManager;
+    private final Storage storage;
+    private final ConnectionManager connectionManager;
+    private final StatisticsManager statisticsManager;
+    private final BroadcastService broadcastService;
+
+    @Inject
+    public MainEventHandler(
+            Config config, CacheManager cacheManager, Storage storage, ConnectionManager connectionManager,
+            StatisticsManager statisticsManager, BroadcastService broadcastService) {
+        this.cacheManager = cacheManager;
+        this.storage = storage;
+        this.connectionManager = connectionManager;
+        this.statisticsManager = statisticsManager;
+        this.broadcastService = broadcastService;
+        String connectionlessProtocolList = config.getString(Keys.STATUS_IGNORE_OFFLINE);
         if (connectionlessProtocolList != null) {
             connectionlessProtocols.addAll(Arrays.asList(connectionlessProtocolList.split("[, ]")));
         }
-        logAttributes.addAll(Arrays.asList(
-                Context.getConfig().getString(Keys.LOGGER_ATTRIBUTES).split("[, ]")));
+        logAttributes.addAll(Arrays.asList(config.getString(Keys.LOGGER_ATTRIBUTES).split("[, ]")));
     }
 
     @Override
@@ -56,17 +80,27 @@ public class MainEventHandler extends ChannelInboundHandlerAdapter {
         if (msg instanceof Position) {
 
             Position position = (Position) msg;
+            Device device = cacheManager.getObject(Device.class, position.getDeviceId());
+
             try {
-                Context.getDeviceManager().updateLatestPosition(position);
+                if (PositionUtil.isLatest(cacheManager, position)) {
+                    Device updatedDevice = new Device();
+                    updatedDevice.setId(position.getDeviceId());
+                    updatedDevice.setPositionId(position.getId());
+                    storage.updateObject(updatedDevice, new Request(
+                            new Columns.Include("positionId"),
+                            new Condition.Equals("id", "id")));
+
+                    cacheManager.updatePosition(position);
+                    connectionManager.updatePosition(true, position);
+                }
             } catch (StorageException error) {
                 LOGGER.warn("Failed to update device", error);
             }
 
-            String uniqueId = Context.getIdentityManager().getById(position.getDeviceId()).getUniqueId();
-
             StringBuilder builder = new StringBuilder();
             builder.append("[").append(NetworkUtil.session(ctx.channel())).append("] ");
-            builder.append("id: ").append(uniqueId);
+            builder.append("id: ").append(device.getUniqueId());
             for (String attribute : logAttributes) {
                 switch (attribute) {
                     case "time":
@@ -109,8 +143,7 @@ public class MainEventHandler extends ChannelInboundHandlerAdapter {
             }
             LOGGER.info(builder.toString());
 
-            Main.getInjector().getInstance(StatisticsManager.class)
-                    .registerMessageStored(position.getDeviceId(), position.getProtocol());
+            statisticsManager.registerMessageStored(position.getDeviceId(), position.getProtocol());
         }
     }
 
@@ -128,7 +161,7 @@ public class MainEventHandler extends ChannelInboundHandlerAdapter {
 
         if (BasePipelineFactory.getHandler(ctx.pipeline(), HttpRequestDecoder.class) == null
                 && !connectionlessProtocols.contains(ctx.pipeline().get(BaseProtocolDecoder.class).getProtocolName())) {
-            Context.getConnectionManager().removeActiveDevice(ctx.channel());
+            connectionManager.deviceDisconnected(ctx.channel());
         }
     }
 

@@ -20,8 +20,10 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import org.traccar.BaseProtocolDecoder;
-import org.traccar.Context;
-import org.traccar.DeviceSession;
+import org.traccar.config.Keys;
+import org.traccar.helper.BufferUtil;
+import org.traccar.helper.model.AttributeUtil;
+import org.traccar.session.DeviceSession;
 import org.traccar.Protocol;
 import org.traccar.helper.BitUtil;
 import org.traccar.helper.DateBuilder;
@@ -72,8 +74,8 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public int getProtocolType(long deviceId) {
-        return Context.getIdentityManager().lookupAttributeInteger(
-                deviceId, getProtocolName() + ".protocolType", protocolType, false, true);
+        Integer value = AttributeUtil.lookup(getCacheManager(), Keys.PROTOCOL_TYPE, deviceId);
+        return value != null ? value : protocolType;
     }
 
     public void setHbm(boolean hbm) {
@@ -81,8 +83,8 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public boolean isHbm(long deviceId) {
-        return Context.getIdentityManager().lookupAttributeBoolean(
-                deviceId, getProtocolName() + ".hbm", hbm, false, true);
+        Boolean value = AttributeUtil.lookup(getCacheManager(), Keys.PROTOCOL_HBM, deviceId);
+        return value != null ? value : hbm;
     }
 
     public void setIncludeAdc(boolean includeAdc) {
@@ -90,8 +92,9 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public boolean isIncludeAdc(long deviceId) {
-        return Context.getIdentityManager().lookupAttributeBoolean(
-                deviceId, getProtocolName() + ".includeAdc", includeAdc, false, true);
+        Boolean value = AttributeUtil.lookup(
+                getCacheManager(), Keys.PROTOCOL_INCLUDE_ADC.withPrefix(getProtocolName()), deviceId);
+        return value != null ? value : includeAdc;
     }
 
     public void setIncludeRpm(boolean includeRpm) {
@@ -99,8 +102,9 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public boolean isIncludeRpm(long deviceId) {
-        return Context.getIdentityManager().lookupAttributeBoolean(
-                deviceId, getProtocolName() + ".includeRpm", includeRpm, false, true);
+        Boolean value = AttributeUtil.lookup(
+                getCacheManager(), Keys.PROTOCOL_INCLUDE_RPM.withPrefix(getProtocolName()), deviceId);
+        return value != null ? value : includeRpm;
     }
 
     public void setIncludeTemp(boolean includeTemp) {
@@ -108,8 +112,9 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
     }
 
     public boolean isIncludeTemp(long deviceId) {
-        return Context.getIdentityManager().lookupAttributeBoolean(
-                deviceId, getProtocolName() + ".includeTemp", includeTemp, false, true);
+        Boolean value = AttributeUtil.lookup(
+                getCacheManager(), Keys.PROTOCOL_INCLUDE_TEMPERATURE.withPrefix(getProtocolName()), deviceId);
+        return value != null ? value : includeTemp;
     }
 
     private Position decode9(
@@ -371,7 +376,7 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
                         }
                     } else if (attribute.startsWith("GTSL")) {
                         position.set(Position.KEY_DRIVER_UNIQUE_ID, attribute.split("\\|")[4]);
-                    } else {
+                    } else if (attribute.contains("=")) {
                         String[] pair = attribute.split("=");
                         if (pair.length >= 2) {
                             String value = pair[1].trim();
@@ -394,6 +399,8 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
                                     break;
                             }
                         }
+                    } else {
+                        position.set("serial", attribute.trim());
                     }
                     remaining -= attribute.length() + 1;
                 }
@@ -667,19 +674,11 @@ public class SuntechProtocolDecoder extends BaseProtocolDecoder {
         }
 
         if (BitUtil.check(mask, 11)) {
-            long value = buf.readUnsignedInt();
-            if (BitUtil.check(value, 31)) {
-                value = -BitUtil.to(value, 31);
-            }
-            position.setLatitude(value / 1000000.0);
+            position.setLatitude(BufferUtil.readSignedMagnitudeInt(buf) / 1000000.0);
         }
 
         if (BitUtil.check(mask, 12)) {
-            long value = buf.readUnsignedInt();
-            if (BitUtil.check(value, 31)) {
-                value = -BitUtil.to(value, 31);
-            }
-            position.setLongitude(value / 1000000.0);
+            position.setLongitude(BufferUtil.readSignedMagnitudeInt(buf) / 1000000.0);
         }
 
         if (BitUtil.check(mask, 13)) {

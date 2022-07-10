@@ -9,13 +9,20 @@ public class Gt06ProtocolDecoderTest extends ProtocolTest {
     @Test
     public void testDecode() throws Exception {
 
-        var decoder = new Gt06ProtocolDecoder(null);
+        var decoder = inject(new Gt06ProtocolDecoder(null));
 
         verifyNull(decoder, binary(
                 "787805120099abec0d0a"));
 
         verifyNull(decoder, binary(
                 "78780D01086471700328358100093F040D0A"));
+
+        verifyPosition(decoder, binary(
+                "78782e2416061a103600c80275298404a0a24000184602d4023a49006f060104ed01940000086508004139765000be7d640d0a"));
+
+        verifyAttribute(decoder, binary(
+                "79790019941b524649443a3030384642324245424133390d0a000c14930d0a"),
+                "serial", "RFID:008FB2BEBA39");
 
         verifyAttribute(decoder, binary(
                 "7878241216040e102c22cf00915ffb04c6016300195a02d402283b00753f400571040001dda4880d0a"),

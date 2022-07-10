@@ -19,6 +19,11 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.traccar.broadcast.BroadcastService;
+import org.traccar.schedule.ScheduleManager;
+import org.traccar.storage.DatabaseModule;
+import org.traccar.web.WebModule;
+import org.traccar.web.WebServer;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
@@ -26,10 +31,10 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.nio.charset.Charset;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class Main {
 
@@ -110,33 +115,31 @@ public final class Main {
 
     public static void run(String configFile) {
         try {
-            Context.init(configFile);
-            injector = Guice.createInjector(new MainModule());
+            injector = Guice.createInjector(new MainModule(configFile), new DatabaseModule(), new WebModule());
             logSystemInfo();
             LOGGER.info("Version: " + Main.class.getPackage().getImplementationVersion());
             LOGGER.info("Starting server...");
 
-            List<LifecycleObject> services = new LinkedList<>();
-            services.add(Context.getServerManager());
-            services.add(Context.getWebServer());
-            services.add(Context.getScheduleManager());
-            services.add(Context.getBroadcastService());
+            var services = Stream.of(
+                    ServerManager.class, WebServer.class, ScheduleManager.class, BroadcastService.class)
+                    .map(injector::getInstance)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
 
-            for (LifecycleObject service : services) {
-                if (service != null) {
-                    service.start();
-                }
+            for (var service : services) {
+                service.start();
             }
 
             Thread.setDefaultUncaughtExceptionHandler((t, e) -> LOGGER.error("Thread exception", e));
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                LOGGER.info("Shutting down server...");
+                LOGGER.info("Stopping server...");
 
-                Collections.reverse(services);
-                for (LifecycleObject service : services) {
-                    if (service != null) {
+                for (var service : services) {
+                    try {
                         service.stop();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
                     }
                 }
             }));
